@@ -2,9 +2,9 @@ const gba = @import("gba");
 
 export var header linksection(".gbaheader") = gba.Header.init("MODE4FLIP", "AMFE", "00", 0);
 
-const front_image_data align(4) = @embedFile("front.agi").*;
-const back_image_data align(4) = @embedFile("back.agi").*;
-const palette_data align(4) = @embedFile("mode4flip.agp").*;
+const front_image_data align(4) = @embedFile("front").*;
+const back_image_data align(4) = @embedFile("back").*;
+const palette_data align(4) = @embedFile("palette").*;
 
 pub export fn main() void {
     // Initialize graphics mode 4.

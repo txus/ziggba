@@ -6,13 +6,6 @@ pub const gba = @import("src/build/build.zig");
 pub fn build(std_b: *std.Build) void {
     const b = gba.GbaBuild.create(std_b);
     
-    // TODO: Use tile and palette data created by the build system for demos
-    
-    // Build font data with `zig build font`.
-    
-    const font_step = std_b.step("font", "Build fonts for gba.text");
-    font_step.dependOn(&b.addBuildFontsStep().step);
-    
     // Build examples.
     
     _ = b.addExecutable(.{
@@ -95,64 +88,49 @@ pub fn build(std_b: *std.Build) void {
         .root_source_file = b.path("examples/bgAffine/bgAffine.zig"),
         .build_options = .{ .text_charsets = .all },
     });
-    const bgAffine_pal = gba.color.PalettizerNearest.create(
-        b.allocator(),
-        &[_]gba.color.ColorRgba32 {
+    const bgAffine_tiles = b.addConvertImage(.{
+        .path = b.path("examples/bgAffine/tiles.png"),
+        .format = .tiles_8bpp,
+        .palettizer = .{ .nearest = &.{
             .transparent,
             .white,
             .red,
             .green,
             .aqua,
-        },
-    ) catch @panic("OOM");
-    _ = bgAffine.addConvertImageTiles8BppStep(.{
-        .image_path = "examples/bgAffine/tiles.png",
-        .output_path = "examples/bgAffine/tiles.bin",
-        .options = .{ .palettizer = bgAffine_pal.pal() },
+        } },
     });
+    bgAffine.addAsset("tiles", bgAffine_tiles.data);
     
     var jesuMusic = b.addExecutable(.{
         .name = "jesuMusic",
         .root_source_file = b.path("examples/jesuMusic/jesuMusic.zig"),
     });
-    const jesuMusic_pal = gba.color.PalettizerNearest.create(
-        b.allocator(),
-        &[_]gba.color.ColorRgba32 {
+    const jesuMusic_charset = b.addConvertImage(.{
+        .path = b.path("examples/jesuMusic/charset.png"),
+        .format = .tiles_4bpp,
+        .palettizer = .{ .nearest = &.{
             .transparent,
             .white,
             .black,
-        },
-    ) catch @panic("OOM");
-    _ = jesuMusic.addConvertImageTiles4BppStep(.{
-        .image_path = "examples/jesuMusic/charset.png",
-        .output_path = "examples/jesuMusic/charset.bin",
-        .options = .{ .palettizer = jesuMusic_pal.pal() },
+        } },
     });
+    jesuMusic.addAsset("charset", jesuMusic_charset.data);
 
     var mode4flip = b.addExecutable(.{
         .name = "mode4flip",
         .root_source_file = b.path("examples/mode4flip/mode4flip.zig"),
     });
-    const mode4flip_pal = gba.color.PalettizerNaive.create(
-        b.allocator(),
-        256,
-    ) catch @panic("OOM");
-    var mode4flip_pal_step = mode4flip.addSaveQuantizedPalettizerPaletteStep(.{
-        .palettizer = mode4flip_pal.pal(),
-        .output_path = "examples/mode4flip/mode4flip.agp",
+    // Both images share a palette, built from the colors they contain.
+    const mode4flip_images = b.addConvertImages(.{
+        .palettizer = .{ .naive = 256 },
+        .images = &.{
+            .{ .path = b.path("examples/mode4flip/front.bmp"), .format = .bitmap_8bpp },
+            .{ .path = b.path("examples/mode4flip/back.bmp"), .format = .bitmap_8bpp },
+        },
     });
-    const mode4flip_front_step = mode4flip.addConvertImageBitmap8BppStep(.{
-        .image_path = "examples/mode4flip/front.bmp",
-        .output_path = "examples/mode4flip/front.agi",
-        .options = .{ .palettizer = mode4flip_pal.pal() },
-    });
-    const mode4flip_back_step = mode4flip.addConvertImageBitmap8BppStep(.{
-        .image_path = "examples/mode4flip/back.bmp",
-        .output_path = "examples/mode4flip/back.agi",
-        .options = .{ .palettizer = mode4flip_pal.pal() },
-    });
-    mode4flip_pal_step.step.dependOn(&mode4flip_front_step.step);
-    mode4flip_pal_step.step.dependOn(&mode4flip_back_step.step);
+    mode4flip.addAsset("front", mode4flip_images.images[0]);
+    mode4flip.addAsset("back", mode4flip_images.images[1]);
+    mode4flip.addAsset("palette", mode4flip_images.palette);
     
     // Run tests with `zig build test`.
     

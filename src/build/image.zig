@@ -1,4 +1,4 @@
-const zigimg = @import("zigimg").zigimg;
+const zigimg = @import("zigimg");
 const std = @import("std");
 const assert = @import("std").debug.assert;
 const ColorRgba32 = @import("color.zig").ColorRgba32;
@@ -17,8 +17,6 @@ pub const convertImageBitmap8Bpp = @import("image_bitmap.zig").convertImageBitma
 pub const convertImageBitmap16BppPath = @import("image_bitmap.zig").convertImageBitmap16BppPath;
 pub const convertSaveImageBitmap16BppPath = @import("image_bitmap.zig").convertSaveImageBitmap16BppPath;
 pub const convertImageBitmap16Bpp = @import("image_bitmap.zig").convertImageBitmap16Bpp;
-pub const ConvertImageBitmap8BppStep = @import("image_bitmap.zig").ConvertImageBitmap8BppStep;
-pub const ConvertImageBitmap16BppStep = @import("image_bitmap.zig").ConvertImageBitmap16BppStep;
 
 pub const ConvertImageTiles4BppOptions = @import("image_tiles.zig").ConvertImageTiles4BppOptions;
 pub const ConvertImageTiles8BppOptions = @import("image_tiles.zig").ConvertImageTiles8BppOptions;
@@ -30,8 +28,6 @@ pub const convertImageTiles4Bpp = @import("image_tiles.zig").convertImageTiles4B
 pub const convertImageTiles8BppPath = @import("image_tiles.zig").convertImageTiles8BppPath;
 pub const convertSaveImageTiles8BppPath = @import("image_tiles.zig").convertSaveImageTiles8BppPath;
 pub const convertImageTiles8Bpp = @import("image_tiles.zig").convertImageTiles8Bpp;
-pub const ConvertImageTiles4BppStep = @import("image_tiles.zig").ConvertImageTiles4BppStep;
-pub const ConvertImageTiles8BppStep = @import("image_tiles.zig").ConvertImageTiles8BppStep;
 
 /// Provides an interface for loading and reading image data.
 /// Wraps a `zigimg.Image`, but it could wrap something else in the future
@@ -110,15 +106,20 @@ pub const Image = struct {
     }
 };
 
+/// Helper to convert a zigimg palette color.
+fn paletteColor(c: zigimg.color.Rgba32) ColorRgba32 {
+    return .rgba(c.r, c.g, c.b, c.a);
+}
+
 /// Helper to get RGBA8888 color from an image.
 fn getImagePixelRgba32(image: zigimg.Image, index: usize) ColorRgba32 {
     return switch (image.pixels) {
         .invalid => .transparent,
-        .indexed1 => |px| @bitCast(px.palette[px.indices[index]]),
-        .indexed2 => |px| @bitCast(px.palette[px.indices[index]]),
-        .indexed4 => |px| @bitCast(px.palette[px.indices[index]]),
-        .indexed8 => |px| @bitCast(px.palette[px.indices[index]]),
-        .indexed16 => |px| @bitCast(px.palette[px.indices[index]]),
+        .indexed1 => |px| paletteColor(px.palette[px.indices[index]]),
+        .indexed2 => |px| paletteColor(px.palette[px.indices[index]]),
+        .indexed4 => |px| paletteColor(px.palette[px.indices[index]]),
+        .indexed8 => |px| paletteColor(px.palette[px.indices[index]]),
+        .indexed16 => |px| paletteColor(px.palette[px.indices[index]]),
         .grayscale1 => |px| {
             const i: u8 = if (px[index].value == 0) 0 else 0xff;
             return ColorRgba32.fromIntensity(i);

@@ -3,7 +3,7 @@ const gba = @import("gba");
 export const gameHeader linksection(".gbaheader") = gba.Header.init("JESUMUSIC", "AJME", "00", 0);
 
 /// File contains 4bpp tile image data.
-const charset_data align(4) = @embedFile("charset.bin").*;
+const charset_data align(4) = @embedFile("charset").*;
 
 const hex_digits: [16]u8 = .{
     '0', '1', '2', '3', '4', '5', '6', '7',

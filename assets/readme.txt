@@ -1,6 +1,6 @@
 Files in this directory are used by the `gba.text` API.
 
-Run `zig build font` to generate 1bpp bitmap files ready for embedding into a ROM.
+ROMs using `gba.text` get these converted to 1bpp bitmap data at build time, for embedding.
 
 font_latin
     Contains glyphs for Unicode code points 0x20 to 0x7f.

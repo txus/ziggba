@@ -3,7 +3,7 @@ const gba = @import("gba");
 export var header linksection(".gbaheader") = gba.Header.init("BGAFFINE", "ABAE", "00", 0);
 
 /// This embedded file contains 4bpp tile image data.
-const tiles_data align(4) = @embedFile("tiles.bin").*;
+const tiles_data align(4) = @embedFile("tiles").*;
 
 /// Buffer will be used to write formatted text.
 var text_buffer: [512]u8 = @splat(0);

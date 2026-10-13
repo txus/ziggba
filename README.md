@@ -11,7 +11,7 @@ For bug reports and feature requests, please submit a [GitHub issue](https://git
 
 ## Usage
 
-ZigGBA currently uses Zig 0.16.0. The tool [`anyzig`](https://github.com/marler8997/anyzig) is recommended for managing Zig installations.
+ZigGBA currently uses Zig 0.17.0. The tool [`anyzig`](https://github.com/marler8997/anyzig) is recommended for managing Zig installations.
 
 With `git` and `zig` installed, follow these steps to download ZigGBA and build the example ROMs:
 
@@ -20,8 +20,6 @@ With `git` and `zig` installed, follow these steps to download ZigGBA and build 
 git clone https://github.com/pineapplemachine/ziggba.git
 # Navigate to the downloaded directory
 cd ziggba
-# Build `gba.text` font data used by examples
-zig build font
 # Compile example ROMs, outputted to `zig-out/bin/`
 zig build
 ```

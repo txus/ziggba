@@ -1,12 +1,10 @@
 pub const ColorRgb555 = @import("../gba/color.zig").ColorRgb555;
 
 pub const savePalette = @import("color_palette.zig").savePalette;
-pub const SavePaletteStep = @import("color_palette.zig").SavePaletteStep;
 
 pub const Palettizer = @import("color_palettizer.zig").Palettizer;
 pub const PalettizerNearest = @import("color_palettizer.zig").PalettizerNearest;
 pub const PalettizerNaive = @import("color_palettizer.zig").PalettizerNaive;
-pub const SaveQuantizedPalettizerPaletteStep = @import("color_palettizer.zig").SaveQuantizedPalettizerPaletteStep;
 
 pub const convertColorDepthLinear = @import("color_quantizer.zig").convertColorDepthLinear;
 pub const ColorQuantizer = @import("color_quantizer.zig").ColorQuantizer;

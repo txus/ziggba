@@ -2,11 +2,11 @@
     .name = .ziggba,
     .version = "0.0.0",
     .fingerprint = 0x94ed0cc5e826ab7, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .zigimg = .{
-            .url = "git+https://github.com/txus/zigimg.git#b8b4504d61384e51292acbac6af0f8238c18c954",
-            .hash = "zigimg-0.1.0-8_eo2oROGABh9E-rvZrWMqgqwakpDU3HG2gS2fmMvyok",
+            .url = "git+https://github.com/zigimg/zigimg.git#734fa919fb15b7917d4eb124f53600348f4ffa30",
+            .hash = "zigimg-0.1.0-8_eo2sBLGACBebrhQZUwRliZNSUyDn6szp99eip_6-Rw",
         },
     },
     .paths = .{

@@ -4,7 +4,7 @@ const std = @import("std");
 
 pub const color = @import("color.zig");
 pub const font = @import("font.zig");
-pub const image = @import("image.zig");
+pub const assets = @import("assets.zig");
 
 pub const LoggerInterface = @import("../gba/debug.zig").LoggerInterface;
 pub const CharsetFlags = font.CharsetFlags;
@@ -12,6 +12,8 @@ pub const CharsetFlags = font.CharsetFlags;
 const gba_linker_script_path = "src/gba/gba.ld";
 const gba_start_zig_file_path = "src/gba/start.zig";
 const gba_lib_file_path = "src/gba/gba.zig";
+
+const RectU16 = @import("../gba/math.zig").RectU16;
 
 const asm_file_paths = [_][]const u8{
     "src/gba/crt0.s",
@@ -57,6 +59,10 @@ pub const GbaBuild = struct {
     thumb_target: std.Build.ResolvedTarget,
     optimize_mode: std.builtin.OptimizeMode,
     gdb: bool,
+    /// Compiled lazily by `getAssetsTool`.
+    assets_tool: ?*std.Build.Step.Compile = null,
+    /// Built lazily by `getFontFile`, indexed like `font.charsets`.
+    font_files: [font.charsets.len]?std.Build.LazyPath = @splat(null),
     
     pub fn create(b: *std.Build) *GbaBuild {
         const gba_b = b.allocator.create(GbaBuild) catch @panic("OOM");
@@ -158,18 +164,15 @@ pub const GbaBuild = struct {
     /// Add font-related imports to a module.
     /// These files contain glyph data bitmaps used by `gba.text`.
     pub fn addFontImports(
-        self: GbaBuild,
+        self: *GbaBuild,
         module: *std.Build.Module,
         build_options: BuildOptions,
     ) void {
-        inline for(font.charsets) |charset| {
+        inline for(font.charsets, 0..) |charset, i| {
             if(@field(build_options.text_charsets, charset.name)) {
-                const png_path = comptime(
-                    "assets/font_" ++ charset.name ++ ".bin"
-                );
                 module.addAnonymousImport(
                     "ziggba_font_" ++ charset.name ++ ".bin",
-                    .{ .root_source_file = self.ziggbaPath(png_path) },
+                    .{ .root_source_file = self.getFontFile(i) },
                 );
             }
         }
@@ -177,7 +180,7 @@ pub const GbaBuild = struct {
     
     /// Add `ziggba_build_options` import to a module.
     pub fn addBuildOptions(
-        self: GbaBuild,
+        self: *GbaBuild,
         module: *std.Build.Module,
         build_options: BuildOptions,
     ) void {
@@ -185,14 +188,14 @@ pub const GbaBuild = struct {
         module.addOptions("ziggba_build_options", b_options);
     }
     
-    /// Add a build step to compile a module.
+    /// Create a module for the GBA target. Modules are private to the
+    /// package, since each ROM's modules can differ by `build_options`.
     pub fn addModule(
-        self: GbaBuild,
-        name: []const u8,
+        self: *GbaBuild,
         root_source_file: std.Build.LazyPath,
         build_options: BuildOptions,
     ) *std.Build.Module {
-        const module = self.b.addModule(name, .{
+        const module = self.b.createModule(.{
             .target = self.thumb_target,
             .optimize = self.optimize_mode,
             .root_source_file = root_source_file,
@@ -204,7 +207,7 @@ pub const GbaBuild = struct {
     
     /// Add a build step to compile a static library.
     pub fn addStaticLibrary(
-        self: GbaBuild,
+        self: *GbaBuild,
         library_name: []const u8,
         root_module: *std.Build.Module,
         build_options: BuildOptions,
@@ -221,7 +224,7 @@ pub const GbaBuild = struct {
     }
     
     pub fn addObject(
-        self: GbaBuild,
+        self: *GbaBuild,
         object_name: []const u8,
         root_source_file: std.Build.LazyPath,
         build_options: BuildOptions,
@@ -274,7 +277,6 @@ pub const GbaBuild = struct {
         ));
         // ZigGBA as a static library
         const gba_module = self.addModule(
-            "gba",
             self.ziggbaPath(gba_lib_file_path),
             options.build_options,
         );
@@ -292,7 +294,8 @@ pub const GbaBuild = struct {
         }
         // Generate GBA ROM
         const objcopy_step = exe.addObjCopy(.{
-            .format = .bin,
+            .basename = self.b.fmt("{s}.gba", .{ options.name }),
+            .format = .binary,
         });
         const install_bin_step = self.b.addInstallBinFile(
             objcopy_step.getOutput(),
@@ -309,71 +312,200 @@ pub const GbaBuild = struct {
             self.b.getInstallStep().dependOn(&install_elf_step.step);
         }
         // Fin
-        return .create(self, exe);
+        return .create(self, exe, objcopy_step.getOutput());
     }
     
-    /// Add a build step for building font data for `gba.text`, converting
-    /// PNG images to bitmap data in a compact binary format.
-    pub fn addBuildFontsStep(
+    /// Get the `ziggba_assets` tool, compiling it for the host on first use.
+    /// The tool converts images and fonts; see `assets.Job`.
+    pub fn getAssetsTool(self: *GbaBuild) *std.Build.Step.Compile {
+        if(self.assets_tool) |tool| {
+            return tool;
+        }
+        const ziggba_b = if(self.ziggba_dep) |dep| dep.builder else self.b;
+        const zigimg_dep = ziggba_b.dependency("zigimg", .{
+            .target = self.b.graph.host,
+            .optimize = .ReleaseSafe,
+        });
+        const tool_module = self.b.createModule(.{
+            .root_source_file = self.ziggbaPath("src/ziggba_assets.zig"),
+            .target = self.b.graph.host,
+            .optimize = .ReleaseSafe,
+        });
+        tool_module.addImport("zigimg", zigimg_dep.module("zigimg"));
+        const tool = self.b.addExecutable(.{
+            .name = "ziggba_assets",
+            .root_module = tool_module,
+        });
+        self.assets_tool = tool;
+        return tool;
+    }
+    
+    /// Add a step running the `ziggba_assets` tool with a given job.
+    /// The caller adds the job's path arguments.
+    fn addAssetsJob(self: *GbaBuild, job: assets.Job) *std.Build.Step.Run {
+        var job_zon: std.Io.Writer.Allocating = .init(self.b.allocator);
+        std.zon.stringify.serialize(job, .{ .whitespace = false }, &job_zon.writer) catch @panic("OOM");
+        const run = self.b.addRunArtifact(self.getAssetsTool());
+        run.addArg(job_zon.written());
+        return run;
+    }
+    
+    /// Get font data for `gba.text` built from the charset at a given index
+    /// in `font.charsets`, adding a build step for it on first use.
+    pub fn getFontFile(self: *GbaBuild, charset_index: usize) std.Build.LazyPath {
+        if(self.font_files[charset_index]) |file| {
+            return file;
+        }
+        const charset = font.charsets[charset_index];
+        const run = self.addAssetsJob(.{ .font = .{
+            .grid_size = charset.grid_size,
+            .image_rect = charset.image_rect,
+        } });
+        run.setName(self.b.fmt("build font {s}", .{ charset.name }));
+        run.addFileArg(self.ziggbaPath(self.b.fmt(
+            "assets/font_{s}.png",
+            .{ charset.image_name },
+        )));
+        const file = run.addOutputFileArg(self.b.fmt("font_{s}.bin", .{ charset.name }));
+        self.font_files[charset_index] = file;
+        return file;
+    }
+    
+    /// One image to convert with `addConvertImages`.
+    pub const ConvertImagesInput = struct {
+        /// Image file to read. Formats supported by zigimg are accepted.
+        path: std.Build.LazyPath,
+        format: assets.ImageFormat,
+        /// Optionally convert only this sub-rectangle of the image.
+        /// Only supported by the bitmap formats.
+        rect: ?RectU16 = null,
+        /// If not set, then an empty input image will trigger an error.
+        allow_empty: bool = false,
+    };
+    
+    pub const ConvertImagesOptions = struct {
+        /// Optionally specify a name for the build step.
+        name: ?[]const u8 = null,
+        /// Shared by all images, in order. Ignored by `.bitmap_16bpp`.
+        palettizer: assets.Palettizer = .{ .naive = 256 },
+        images: []const ConvertImagesInput,
+    };
+    
+    pub const ConvertedImages = struct {
+        /// Converted data for each image, in the same order as the inputs.
+        images: []const std.Build.LazyPath,
+        /// The palettizer's palette, quantized to 16-bit GBA colors.
+        palette: std.Build.LazyPath,
+    };
+    
+    /// Add a build step converting images to GBA tile or bitmap data, in
+    /// order, using one shared palettizer. Use this rather than separate
+    /// `addConvertImage` calls when images should share a palette that is
+    /// discovered from their pixels, i.e. with `.naive`.
+    pub fn addConvertImages(
         self: *GbaBuild,
-    ) *font.BuildFontsStep {
-        return font.BuildFontsStep.create(self);
+        options: ConvertImagesOptions,
+    ) ConvertedImages {
+        const job_images = self.b.allocator.alloc(assets.Image, options.images.len) catch @panic("OOM");
+        for(options.images, job_images) |input, *job_image| {
+            job_image.* = .{
+                .format = input.format,
+                .rect = input.rect,
+                .allow_empty = input.allow_empty,
+            };
+        }
+        const run = self.addAssetsJob(.{ .images = .{
+            .palettizer = options.palettizer,
+            .images = job_images,
+        } });
+        if(options.name) |name| {
+            run.setName(name);
+        }
+        else if(options.images.len > 0) {
+            run.setName(self.b.fmt("convert images {s}", .{
+                options.images[0].path.getDisplayName(),
+            }));
+        }
+        const palette = run.addOutputFileArg("palette.agp");
+        const outputs = self.b.allocator.alloc(std.Build.LazyPath, options.images.len) catch @panic("OOM");
+        for(options.images, outputs, 0..) |input, *output, i| {
+            run.addFileArg(input.path);
+            output.* = run.addOutputFileArg(self.b.fmt("image{d}.bin", .{ i }));
+        }
+        return .{ .images = outputs, .palette = palette };
     }
     
-    pub fn addConvertImageTiles4BppStep(
-        self: GbaBuild,
-        options: image.ConvertImageTiles4BppStep.Options,
-    ) *image.ConvertImageTiles4BppStep {
-        return image.ConvertImageTiles4BppStep.create(self.b, options);
+    pub const ConvertImageOptions = struct {
+        /// Optionally specify a name for the build step.
+        name: ?[]const u8 = null,
+        /// Image file to read. Formats supported by zigimg are accepted.
+        path: std.Build.LazyPath,
+        format: assets.ImageFormat,
+        /// Ignored by `.bitmap_16bpp`.
+        palettizer: assets.Palettizer = .{ .naive = 256 },
+        /// Optionally convert only this sub-rectangle of the image.
+        /// Only supported by the bitmap formats.
+        rect: ?RectU16 = null,
+        /// If not set, then an empty input image will trigger an error.
+        allow_empty: bool = false,
+    };
+    
+    pub const ConvertedImage = struct {
+        /// Converted tile or bitmap data.
+        data: std.Build.LazyPath,
+        /// The palettizer's palette, quantized to 16-bit GBA colors.
+        palette: std.Build.LazyPath,
+    };
+    
+    /// Add a build step converting an image to GBA tile or bitmap data.
+    pub fn addConvertImage(
+        self: *GbaBuild,
+        options: ConvertImageOptions,
+    ) ConvertedImage {
+        const converted = self.addConvertImages(.{
+            .name = options.name,
+            .palettizer = options.palettizer,
+            .images = &.{ .{
+                .path = options.path,
+                .format = options.format,
+                .rect = options.rect,
+                .allow_empty = options.allow_empty,
+            } },
+        });
+        return .{ .data = converted.images[0], .palette = converted.palette };
     }
     
-    pub fn addConvertImageTiles8BppStep(
-        self: GbaBuild,
-        options: image.ConvertImageTiles8BppStep.Options,
-    ) *image.ConvertImageTiles8BppStep {
-        return image.ConvertImageTiles8BppStep.create(self.b, options);
-    }
-    
-    pub fn addConvertImageBitmap8BppStep(
-        self: GbaBuild,
-        options: image.ConvertImageBitmap8BppStep.Options,
-    ) *image.ConvertImageBitmap8BppStep {
-        return image.ConvertImageBitmap8BppStep.create(self.b, options);
-    }
-    
-    pub fn addConvertImageBitmap16BppStep(
-        self: GbaBuild,
-        options: image.ConvertImageBitmap16BppStep.Options,
-    ) *image.ConvertImageBitmap16BppStep {
-        return image.ConvertImageBitmap16BppStep.create(self.b, options);
-    }
-    
-    pub fn addSavePaletteStep(
-        self: GbaBuild,
-        options: color.SavePaletteStep.Options,
-    ) *color.SavePaletteStep {
-        return color.SavePaletteStep.create(self.b, options);
-    }
-    
-    pub fn addSaveQuantizedPalettizerPaletteStep(
-        self: GbaBuild,
-        options: color.SaveQuantizedPalettizerPaletteStep.Options,
-    ) *color.SaveQuantizedPalettizerPaletteStep {
-        return color.SaveQuantizedPalettizerPaletteStep.create(self.b, options);
+    /// Write palette data to a file, e.g. for use with `@embedFile`.
+    pub fn addPaletteFile(
+        self: *GbaBuild,
+        palette: []const color.ColorRgb555,
+    ) std.Build.LazyPath {
+        const files = self.b.addWriteFiles();
+        return files.add("palette.agp", std.mem.sliceAsBytes(palette));
     }
 };
 
 pub const GbaExecutable = struct {
     b: *GbaBuild,
     step: *std.Build.Step.Compile,
+    /// The `*.gba` ROM file, e.g. to pass to an emulator with `Run.addFileArg`.
+    rom: std.Build.LazyPath,
     
-    pub fn init(b: *GbaBuild, step: *std.Build.Step.Compile) GbaExecutable {
-        return .{ .b = b, .step = step };
+    pub fn init(
+        b: *GbaBuild,
+        step: *std.Build.Step.Compile,
+        rom: std.Build.LazyPath,
+    ) GbaExecutable {
+        return .{ .b = b, .step = step, .rom = rom };
     }
     
-    pub fn create(b: *GbaBuild, step: *std.Build.Step.Compile) *GbaExecutable {
+    pub fn create(
+        b: *GbaBuild,
+        step: *std.Build.Step.Compile,
+        rom: std.Build.LazyPath,
+    ) *GbaExecutable {
         const exe = b.allocator().create(GbaExecutable) catch @panic("OOM");
-        exe.* = .init(b, step);
+        exe.* = .init(b, step, rom);
         return exe;
     }
     
@@ -385,90 +517,15 @@ pub const GbaExecutable = struct {
         self.step.step.dependOn(step);
     }
     
-    /// Add a step that the executable depends on.
-    pub fn addBuildFontsStep(
+    /// Make a file available to the ROM's root module via `@embedFile(name)`,
+    /// e.g. data produced by `GbaBuild.addConvertImage`.
+    pub fn addAsset(
         self: *GbaExecutable,
-    ) *font.BuildFontsStep {
-        const step = font.BuildFontsStep.create(self.b);
-        self.dependOn(&step.step);
-        return step;
-    }
-    
-    /// Add a step that the executable depends on.
-    pub fn addConvertImageTiles4BppStep(
-        self: *GbaExecutable,
-        options: image.ConvertImageTiles4BppStep.Options,
-    ) *image.ConvertImageTiles4BppStep {
-        const step = image.ConvertImageTiles4BppStep.create(
-            self.getOwner(),
-            options,
-        );
-        self.dependOn(&step.step);
-        return step;
-    }
-    
-    /// Add a step that the executable depends on.
-    pub fn addConvertImageTiles8BppStep(
-        self: *GbaExecutable,
-        options: image.ConvertImageTiles8BppStep.Options,
-    ) *image.ConvertImageTiles8BppStep {
-        const step = image.ConvertImageTiles8BppStep.create(
-            self.getOwner(),
-            options,
-        );
-        self.dependOn(&step.step);
-        return step;
-    }
-    
-    /// Add a step that the executable depends on.
-    pub fn addConvertImageBitmap8BppStep(
-        self: *GbaExecutable,
-        options: image.ConvertImageBitmap8BppStep.Options,
-    ) *image.ConvertImageBitmap8BppStep {
-        const step = image.ConvertImageBitmap8BppStep.create(
-            self.getOwner(),
-            options,
-        );
-        self.dependOn(&step.step);
-        return step;
-    }
-    
-    /// Add a step that the executable depends on.
-    pub fn addConvertImageBitmap16BppStep(
-        self: *GbaExecutable,
-        options: image.ConvertImageBitmap16BppStep.Options,
-    ) *image.ConvertImageBitmap16BppStep {
-        const step = image.ConvertImageBitmap16BppStep.create(
-            self.getOwner(),
-            options,
-        );
-        self.dependOn(&step.step);
-        return step;
-    }
-    
-    /// Add a step that the executable depends on.
-    pub fn addSavePaletteStep(
-        self: *GbaExecutable,
-        options: color.SavePaletteStep.Options,
-    ) *color.SavePaletteStep {
-        const step = color.SavePaletteStep.create(
-            self.getOwner(),
-            options,
-        );
-        self.dependOn(&step.step);
-        return step;
-    }
-    
-    /// Add a step that the executable depends on.
-    pub fn addSaveQuantizedPalettizerPaletteStep(
-        self: *GbaExecutable,
-        options: color.SaveQuantizedPalettizerPaletteStep.Options,
-    ) *color.SaveQuantizedPalettizerPaletteStep {
-        const step = color.SaveQuantizedPalettizerPaletteStep.create(
-            self.getOwner(),
-            options,
-        );
-        self.dependOn(&step.step);
-        return step;
+        name: []const u8,
+        file: std.Build.LazyPath,
+    ) void {
+        self.step.root_module.addAnonymousImport(name, .{
+            .root_source_file = file,
+        });
     }
 };

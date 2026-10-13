@@ -1,10 +1,6 @@
 const std = @import("std");
 const assert = @import("std").debug.assert;
 const ColorRgba32 = @import("color.zig").ColorRgba32;
-const ColorQuantizer = @import("color.zig").ColorQuantizer;
-const ColorQuantizerLinear = @import("color.zig").ColorQuantizerLinear;
-const savePalette = @import("color.zig").savePalette;
-const ColorRgb555 = @import("../gba/color.zig").ColorRgb555;
 
 /// Result type returned by `colorRgbNearestLinear`.
 const NearestColorResult = struct {
@@ -206,73 +202,5 @@ pub const PalettizerNaive = struct {
     pub fn getPalette(ctx: *anyopaque) []const ColorRgba32 {
         const self: *PalettizerNaive = @ptrCast(@alignCast(ctx));
         return self.colors[0..self.colors_count];
-    }
-};
-
-/// Quantize and save a palettizer's palette as a build step.
-pub const SaveQuantizedPalettizerPaletteStep = struct {
-    pub const Options = struct {
-        /// Optionally specify a name for the build step.
-        name: ?[]const u8 = null,
-        /// Save the palette belonging to this palettizer instance.
-        palettizer: Palettizer,
-        /// Quantizer to use for converting 32-bit palette colors to 16-bit
-        /// GBA palette colors. Defaults to `ColorQuantizerLinear` if not
-        /// specified here.
-        quantizer: ?ColorQuantizer = null,
-        /// File path to which the palette data should be written.
-        output_path: []const u8,
-    };
-    
-    step: std.Build.Step,
-    palettizer: Palettizer,
-    quantizer: ?ColorQuantizer,
-    output_path: []const u8,
-    
-    pub fn create(b: *std.Build, options: Options) *SaveQuantizedPalettizerPaletteStep {
-        const step_name = options.name orelse b.fmt(
-            "SaveQuantizedPalettizerPaletteStep {s}",
-            .{ options.output_path },
-        );
-        const save_step = (
-            b.allocator.create(SaveQuantizedPalettizerPaletteStep) catch @panic("OOM")
-        );
-        save_step.* = .{
-            .palettizer = options.palettizer,
-            .quantizer = options.quantizer,
-            .output_path = options.output_path,
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .owner = b,
-                .makeFn = make,
-                .name = step_name,
-            }),
-        };
-        return save_step;
-    }
-    
-    fn make(
-        step: *std.Build.Step,
-        make_options: std.Build.Step.MakeOptions,
-    ) !void {
-        const self: *SaveQuantizedPalettizerPaletteStep = @fieldParentPtr("step", step);
-        const node_name = step.owner.fmt(
-            "Saving palettized palette: {s}",
-            .{ self.output_path },
-        );
-        var node = make_options.progress_node.start(node_name, 1);
-        defer node.end();
-        const palette_colors = self.palettizer.getPalette();
-        const quantized_colors = try step.owner.allocator.alloc(
-            ColorRgb555,
-            palette_colors.len,
-        );
-        defer step.owner.allocator.free(quantized_colors);
-        const default_quantizer = ColorQuantizerLinear.init();
-        const quantizer = (
-            self.quantizer orelse default_quantizer.quantizer()
-        );
-        quantizer.quantizeSlice(palette_colors, quantized_colors, .{});
-        try savePalette(step.owner.graph.io, quantized_colors, self.output_path);
     }
 };
