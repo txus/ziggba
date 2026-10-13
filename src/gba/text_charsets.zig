@@ -131,8 +131,8 @@ pub const CharsetFlags = struct {
     /// All flags set.
     pub const all: CharsetFlags = blk: {
         var flags: CharsetFlags = .{};
-        for(@typeInfo(CharsetFlags).@"struct".fields) |field| {
-            @field(flags, field.name) = true;
+        for(@typeInfo(CharsetFlags).@"struct".field_names) |name| {
+            @field(flags, name) = true;
         }
         break :blk flags;
     };
