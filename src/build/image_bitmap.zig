@@ -86,10 +86,11 @@ pub const ConvertImageBitmap16BppError = ConvertImageBitmapError;
 /// an image file path to read image data from.
 pub fn convertImageBitmap8BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     options: ConvertImageBitmap8BppOptions,
 ) !ConvertImageBitmap8BppOutput {
-    var image = try Image.fromFilePath(allocator, image_path);
+    var image = try Image.fromFilePath(allocator, io, image_path);
     defer image.deinit();
     return convertImageBitmap8Bpp(allocator, image, options);
 }
@@ -99,15 +100,17 @@ pub fn convertImageBitmap8BppPath(
 /// to write the resulting data to.
 pub fn convertSaveImageBitmap8BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     output_path: []const u8,
     options: ConvertImageBitmap8BppOptions,
 ) !void {
-    const tiles_data = try convertImageBitmap8BppPath(allocator, image_path, options);
+    const tiles_data = try convertImageBitmap8BppPath(allocator, io, image_path, options);
     defer allocator.free(tiles_data.data);
-    var file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(tiles_data.data);
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = tiles_data.data,
+    });
 }
 
 /// Convert an arbitrary image to uncompressed bitmap data which may be
@@ -154,10 +157,11 @@ pub fn convertImageBitmap8Bpp(
 /// an image file path to read image data from.
 pub fn convertImageBitmap16BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     options: ConvertImageBitmap16BppOptions,
 ) !ConvertImageBitmap16BppOutput {
-    var image = try Image.fromFilePath(allocator, image_path);
+    var image = try Image.fromFilePath(allocator, io, image_path);
     defer image.deinit();
     return convertImageBitmap16Bpp(allocator, image, options);
 }
@@ -167,15 +171,17 @@ pub fn convertImageBitmap16BppPath(
 /// to write the resulting data to.
 pub fn convertSaveImageBitmap16BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     output_path: []const u8,
     options: ConvertImageBitmap16BppOptions,
 ) !void {
-    const tiles_data = try convertImageBitmap16BppPath(allocator, image_path, options);
+    const tiles_data = try convertImageBitmap16BppPath(allocator, io, image_path, options);
     defer allocator.free(tiles_data.data);
-    var file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(tiles_data.data);
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = tiles_data.data,
+    });
 }
 
 /// Convert an arbitrary image to uncompressed bitmap data which may be
@@ -267,6 +273,7 @@ pub const ConvertImageBitmap8BppStep = struct {
         defer node.end();
         try convertSaveImageBitmap8BppPath(
             step.owner.allocator,
+            step.owner.graph.io,
             self.image_path,
             self.output_path,
             self.options,
@@ -323,6 +330,7 @@ pub const ConvertImageBitmap16BppStep = struct {
         defer node.end();
         try convertSaveImageBitmap16BppPath(
             step.owner.allocator,
+            step.owner.graph.io,
             self.image_path,
             self.output_path,
             self.options,

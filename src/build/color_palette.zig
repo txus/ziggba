@@ -4,12 +4,14 @@ const ColorRgb555 = @import("../gba/color.zig").ColorRgb555;
 
 /// Save palette data as a binary file at a given file path.
 pub fn savePalette(
+    io: std.Io,
     palette: []const ColorRgb555,
     output_path: []const u8,
 ) !void {
-    var file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(std.mem.sliceAsBytes(palette));
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = std.mem.sliceAsBytes(palette),
+    });
 }
 
 /// Save a palette as a build step.
@@ -56,6 +58,6 @@ pub const SavePaletteStep = struct {
         );
         var node = make_options.progress_node.start(node_name, 1);
         defer node.end();
-        try savePalette(self.palette, self.output_path);
+        try savePalette(step.owner.graph.io, self.palette, self.output_path);
     }
 };

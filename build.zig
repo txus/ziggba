@@ -157,10 +157,16 @@ pub fn build(std_b: *std.Build) void {
     // Run tests with `zig build test`.
     
     const test_math = std_b.addRunArtifact(std_b.addTest(.{
-        .root_source_file = std_b.path("src/gba/math.zig"),
+        .root_module = std_b.createModule(.{
+            .root_source_file = std_b.path("src/gba/math.zig"),
+            .target = std_b.graph.host,
+        }),
     }));
     const test_format = std_b.addRunArtifact(std_b.addTest(.{
-        .root_source_file = std_b.path("src/gba/format.zig"),
+        .root_module = std_b.createModule(.{
+            .root_source_file = std_b.path("src/gba/format.zig"),
+            .target = std_b.graph.host,
+        }),
     }));
 
     const test_step = std_b.step("test", "Run unit tests");

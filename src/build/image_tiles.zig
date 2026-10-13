@@ -54,10 +54,11 @@ pub const ConvertImageTiles8BppError = ConvertImageTilesError;
 /// an image file path to read image data from.
 pub fn convertImageTiles4BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     options: ConvertImageTiles4BppOptions,
 ) ![]Tile4Bpp {
-    var image = try Image.fromFilePath(allocator, image_path);
+    var image = try Image.fromFilePath(allocator, io, image_path);
     defer image.deinit();
     return convertImageTiles4Bpp(allocator, image, options);
 }
@@ -67,15 +68,17 @@ pub fn convertImageTiles4BppPath(
 /// to write the resulting data to.
 pub fn convertSaveImageTiles4BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     output_path: []const u8,
     options: ConvertImageTiles4BppOptions,
 ) !void {
-    const tiles = try convertImageTiles4BppPath(allocator, image_path, options);
+    const tiles = try convertImageTiles4BppPath(allocator, io, image_path, options);
     defer allocator.free(tiles);
-    var file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(std.mem.sliceAsBytes(tiles));
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = std.mem.sliceAsBytes(tiles),
+    });
 }
 
 fn validateImageTileCount(
@@ -156,10 +159,11 @@ pub fn convertImageTiles4Bpp(
 /// an image file path to read image data from.
 pub fn convertImageTiles8BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     options: ConvertImageTiles8BppOptions,
 ) ![]Tile8Bpp {
-    var image = try Image.fromFilePath(allocator, image_path);
+    var image = try Image.fromFilePath(allocator, io, image_path);
     defer image.deinit();
     return convertImageTiles8Bpp(allocator, image, options);
 }
@@ -169,15 +173,17 @@ pub fn convertImageTiles8BppPath(
 /// to write the resulting data to.
 pub fn convertSaveImageTiles8BppPath(
     allocator: std.mem.Allocator,
+    io: std.Io,
     image_path: []const u8,
     output_path: []const u8,
     options: ConvertImageTiles8BppOptions,
 ) !void {
-    const tiles = try convertImageTiles8BppPath(allocator, image_path, options);
+    const tiles = try convertImageTiles8BppPath(allocator, io, image_path, options);
     defer allocator.free(tiles);
-    var file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(std.mem.sliceAsBytes(tiles));
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = std.mem.sliceAsBytes(tiles),
+    });
 }
 
 /// Convert an arbitrary image to uncompressed tile data which may be
@@ -276,6 +282,7 @@ pub const ConvertImageTiles4BppStep = struct {
         defer node.end();
         try convertSaveImageTiles4BppPath(
             step.owner.allocator,
+            step.owner.graph.io,
             self.image_path,
             self.output_path,
             self.options,
@@ -332,6 +339,7 @@ pub const ConvertImageTiles8BppStep = struct {
         defer node.end();
         try convertSaveImageTiles8BppPath(
             step.owner.allocator,
+            step.owner.graph.io,
             self.image_path,
             self.output_path,
             self.options,

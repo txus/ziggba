@@ -62,7 +62,7 @@ const Glyph = struct {
     x_max: u16,
     y_min: u16,
     y_max: u16,
-    rows: std.ArrayList(u16),
+    rows: std.array_list.Managed(u16),
 
     pub fn init(
         image: Image,
@@ -75,7 +75,7 @@ const Glyph = struct {
             .x_max = image_rect.x,
             .y_min = image_rect.y + image_rect.height,
             .y_max = image_rect.y,
-            .rows = std.ArrayList(u16).init(allocator),
+            .rows = std.array_list.Managed(u16).init(allocator),
         };
         // Find bounds of image data within the grid cell rect.
         for(image_rect.y..image_rect.y + image_rect.height) |px_y| {
@@ -123,7 +123,7 @@ const Glyph = struct {
     }
     
     /// Write header bytes into a buffer.
-    pub fn encodeHeader(self: Glyph, buffer: *std.ArrayList(u8)) !void {
+    pub fn encodeHeader(self: Glyph, buffer: *std.array_list.Managed(u8)) !void {
         const width: usize = if(self.x_max >= self.x_min) self.x_max - self.x_min else 0;
         const height: usize = if(self.y_max >= self.y_min) self.y_max - self.y_min else 0;
         const y_offset = self.y_min - self.image_rect.y;
@@ -135,7 +135,7 @@ const Glyph = struct {
     }
 
     /// Write bitmap data bytes into a buffer.
-    pub fn encodeRows(self: Glyph, buffer: *std.ArrayList(u8)) !void {
+    pub fn encodeRows(self: Glyph, buffer: *std.array_list.Managed(u8)) !void {
         const wide = (self.x_max - self.x_min) > 8;
         for(self.rows.items) |row| {
             if(wide) {
@@ -155,8 +155,9 @@ pub fn buildFontPath(
     grid_size: Vec2U16,
     image_rect: RectU16,
     allocator: std.mem.Allocator,
+    io: std.Io,
 ) ![]u8 {
-    var image = try Image.fromFilePath(allocator, image_path);
+    var image = try Image.fromFilePath(allocator, io, image_path);
     defer image.deinit();
     return buildFont(image, grid_size, image_rect, allocator);
 }
@@ -175,17 +176,21 @@ pub fn buildSaveFontPath(
     image_rect: RectU16,
     /// Use this allocator.
     allocator: std.mem.Allocator,
+    /// Use this I/O implementation.
+    io: std.Io,
 ) !void {
     const font_data = try buildFontPath(
         image_path,
         grid_size,
         image_rect,
         allocator,
+        io,
     );
     defer allocator.free(font_data);
-    var file = try std.fs.cwd().createFile(output_path, .{});
-    defer file.close();
-    try file.writeAll(font_data);
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = font_data,
+    });
 }
 
 /// This function converts monochrome image data (e.g. in PNG format)
@@ -201,7 +206,7 @@ pub fn buildFont(
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     // Read glyphs from the image.
-    var glyphs = std.ArrayList(Glyph).init(arena.allocator());
+    var glyphs = std.array_list.Managed(Glyph).init(arena.allocator());
     const grid_cols = image_rect.width / grid_size.x;
     const grid_rows = image_rect.height / grid_size.y;
     for(0..grid_rows) |row| {
@@ -217,9 +222,9 @@ pub fn buildFont(
         }
     }
     // Encode glyph data.
-    var headers = std.ArrayList(u8).init(allocator);
+    var headers = std.array_list.Managed(u8).init(allocator);
     defer headers.deinit();
-    var bitmaps = std.ArrayList(u8).init(arena.allocator());
+    var bitmaps = std.array_list.Managed(u8).init(arena.allocator());
     const headers_len = glyphs.items.len * 4; // 4 bytes per glyph
     for(glyphs.items) |glyph| {
         var offset: usize = 0;
@@ -291,6 +296,7 @@ pub const BuildFontsStep = struct {
                 charset.grid_size,
                 charset.image_rect,
                 self.b.allocator(),
+                step.owner.graph.io,
             );
             root_node.completeOne();
         }

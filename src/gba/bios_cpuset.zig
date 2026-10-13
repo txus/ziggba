@@ -71,7 +71,7 @@ pub fn cpuSet(
             : [source] "{r0}" (source),
               [destination] "{r1}" (destination),
               [options] "{r2}" (options),
-            : "r0", "r1", "r2", "r3", "cc", "memory"
+            : .{ .r0 = true, .r1 = true, .r2 = true, .r3 = true, .cpsr = true, .memory = true }
         );
     }
 }
@@ -104,7 +104,7 @@ pub fn cpuFastSet(
             : [source] "{r0}" (source),
               [destination] "{r1}" (destination),
               [options] "{r2}" (options),
-            : "r0", "r1", "r2", "r3", "cc", "memory"
+            : .{ .r0 = true, .r1 = true, .r2 = true, .r3 = true, .cpsr = true, .memory = true }
         );
     }
 }

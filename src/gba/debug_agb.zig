@@ -22,6 +22,11 @@ pub const AgbPrintContext = packed struct {
 
 const AgbPrintStream = struct {
     written: usize,
+    /// Unbuffered `std.Io.Writer` which forwards bytes to `write`.
+    interface: std.Io.Writer = .{
+        .vtable = &.{ .drain = drain },
+        .buffer = &.{},
+    },
 
     pub fn init() AgbPrintStream {
         return .{ .written = 0 };
@@ -50,25 +55,26 @@ const AgbPrintStream = struct {
         return bytes_i;
     }
     
-    /// Wraps `write` with an interface compatible with `std.io.Writer`.
-    pub fn writerWrite(self: *AgbPrintStream, bytes: []const u8) !usize {
-        return self.write(bytes);
-    }
-    
     pub fn flush(self: *AgbPrintStream) void {
         if(self.written != 0) {
             gba.bios.agbPrintFlush();
         }
     }
 
-    pub fn outStream(
-        self: *AgbPrintStream,
-    ) std.io.Writer(
-        *AgbPrintStream,
-        error{BufferTooSmall},
-        AgbPrintStream.writerWrite,
-    ) {
-        return .{ .context = self };
+    fn drain(
+        w: *std.Io.Writer,
+        data: []const []const u8,
+        splat: usize,
+    ) std.Io.Writer.Error!usize {
+        const self: *AgbPrintStream = @fieldParentPtr("interface", w);
+        var count: usize = 0;
+        for(data[0 .. data.len - 1]) |bytes| {
+            count += self.write(bytes);
+        }
+        for(0..splat) |_| {
+            count += self.write(data[data.len - 1]);
+        }
+        return count;
     }
 };
 
@@ -88,7 +94,7 @@ pub fn agbPrint(comptime formatString: []const u8, args: anytype) !void {
     lockPrint();
     defer unlockPrint();
     defer stream.flush();
-    try std.fmt.format(stream.outStream(), formatString, args);
+    try stream.interface.print(formatString, args);
 }
 
 /// Print a message.

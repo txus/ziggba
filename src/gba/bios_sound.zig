@@ -102,7 +102,7 @@ pub fn soundBiasChange(level: bool) void {
         "swi 0x19"
         :
         : [level] "{r0}" (level),
-        : "r0", "r1", "r3"
+        : .{ .r0 = true, .r1 = true, .r3 = true }
     );
 }
 
@@ -112,7 +112,7 @@ pub fn soundDriverInit(sound_area: *SoundArea) void {
         "swi 0x1a"
         :
         : [sound_area] "{r0}" (sound_area),
-        : "r0", "r1", "r3"
+        : .{ .r0 = true, .r1 = true, .r3 = true }
     );
 }
 
@@ -122,7 +122,7 @@ pub fn soundDriverMode(options: SoundDriverModeOptions) void {
         "swi 0x1b"
         :
         : [options] "{r0}" (options),
-        : "r0", "r1", "r3"
+        : .{ .r0 = true, .r1 = true, .r3 = true }
     );
 }
 
@@ -132,7 +132,7 @@ pub fn soundDriverMain() void {
         "swi 0x1c"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -142,7 +142,7 @@ pub fn soundDriverVSync() void {
         "swi 0x1d"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -152,7 +152,7 @@ pub fn soundChannelClear() void {
         "swi 0x1e"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -168,7 +168,7 @@ pub fn midiKey2Freq(
         : [wave_data] "{r0}" (wave_data),
           [midi_key] "{r1}" (midi_key),
           [fine_adjustment] "{r2}" (fine_adjustment),
-        : "r0", "r1", "r2", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r2 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -178,7 +178,7 @@ pub fn soundDriverVSyncOff() void {
         "swi 0x28"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -188,6 +188,6 @@ pub fn soundDriverVSyncOn() void {
         "swi 0x29"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }

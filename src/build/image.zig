@@ -37,19 +37,22 @@ pub const ConvertImageTiles8BppStep = @import("image_tiles.zig").ConvertImageTil
 /// Wraps a `zigimg.Image`, but it could wrap something else in the future
 /// while providing the same interface.
 pub const Image = struct {
+    allocator: std.mem.Allocator,
     data: zigimg.Image,
     
     /// Load image from a file path.
     pub fn fromFilePath(
         allocator: std.mem.Allocator,
+        io: std.Io,
         path: []const u8,
     ) (
         std.mem.Allocator.Error ||
         zigimg.Image.ReadError ||
-        std.fs.File.OpenError
+        std.Io.File.OpenError
     )!Image {
-        const data = try zigimg.Image.fromFilePath(allocator, path);
-        return .{ .data = data };
+        var read_buffer: [4096]u8 = undefined;
+        const data = try zigimg.Image.fromFilePath(allocator, io, path, &read_buffer);
+        return .{ .allocator = allocator, .data = data };
     }
     
     /// Check whether the instance possesses valid image data.
@@ -59,7 +62,7 @@ pub const Image = struct {
     
     /// Free memory in use by this image.
     pub fn deinit(self: *Image) void {
-        self.data.deinit();
+        self.data.deinit(self.allocator);
     }
     
     /// Get the width of the image, in pixels.
@@ -149,6 +152,10 @@ fn getImagePixelRgba32(image: zigimg.Image, index: usize) ColorRgba32 {
         .rgb24 => |px| .rgb(px[index].r, px[index].g, px[index].b),
         .rgba32 => |px| .rgba(px[index].r, px[index].g, px[index].b, px[index].a),
         .rgb332 => |px| .rgb(px[index].r, px[index].g, px[index].b),
+        .sega_grb333 => |px| .rgb(px[index].r, px[index].g, px[index].b),
+        .sega_bgr333 => |px| .rgb(px[index].r, px[index].g, px[index].b),
+        .sega_bgr222 => |px| .rgb(px[index].r, px[index].g, px[index].b),
+        .sega_bgr444 => |px| .rgb(px[index].r, px[index].g, px[index].b),
         .rgb565 => |px| .rgb(px[index].r, px[index].g, px[index].b),
         .rgb555 => |px| .rgb(px[index].r, px[index].g, px[index].b),
         .bgr555 => |px| .rgb(px[index].r, px[index].g, px[index].b),

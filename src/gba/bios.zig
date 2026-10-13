@@ -254,7 +254,7 @@ pub fn softReset() void {
         "swi 0x00"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -290,7 +290,7 @@ pub fn registerRamReset(flags: RegisterRamResetFlags) void {
         "swi 0x01"
         :
         : [flags] "{r0}" (flags),
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -303,7 +303,7 @@ pub fn halt() void {
         "swi 0x02"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -318,7 +318,7 @@ pub fn stop() void {
         "swi 0x03"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -343,7 +343,7 @@ pub fn intrWait(
         :
         : [wait_type] "{r0}" (wait_type),
           [interrupt_flags] "{r1}" (interrupt_flags),
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -363,7 +363,7 @@ pub fn vblankIntrWait() void {
         "swi 0x05"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -404,7 +404,7 @@ pub fn multiBoot(
         : [ret] "={r0}" (-> bool),
         : [param] "{r0}" (param),
           [transfer_mode] "{r1}" (transfer_mode),
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -415,7 +415,7 @@ pub fn hardReset() void {
         "swi 0x26"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }
 
@@ -427,6 +427,6 @@ pub fn agbPrintFlush() void {
         "swi 0xfa"
         :
         :
-        : "r0", "r1", "r3", "cc"
+        : .{ .r0 = true, .r1 = true, .r3 = true, .cpsr = true }
     );
 }

@@ -228,9 +228,11 @@ pub const GbaBuild = struct {
     ) *std.Build.Step.Compile {
         const object = self.b.addObject(.{
             .name = object_name,
-            .target = self.thumb_target,
-            .optimize = self.optimize_mode,
-            .root_source_file = root_source_file,
+            .root_module = self.b.createModule(.{
+                .target = self.thumb_target,
+                .optimize = self.optimize_mode,
+                .root_source_file = root_source_file,
+            }),
         });
         self.addFontImports(object.root_module, build_options);
         self.addBuildOptions(object.root_module, build_options);
@@ -260,8 +262,12 @@ pub const GbaBuild = struct {
         self.addFontImports(exe_module, options.build_options);
         self.addBuildOptions(exe_module, options.build_options);
         self.b.default_step.dependOn(&exe.step);
+        // Debug builds otherwise skip section GC and bundle the UBSan runtime,
+        // bloating the ROM enormously.
+        exe.link_gc_sections = true;
+        exe.bundle_ubsan_rt = false;
         // Zig entry point and startup routine
-        exe.addObject(self.addObject(
+        exe.root_module.addObject(self.addObject(
             "gba_start",
             self.ziggbaPath(gba_start_zig_file_path),
             options.build_options,
@@ -272,7 +278,7 @@ pub const GbaBuild = struct {
             self.ziggbaPath(gba_lib_file_path),
             options.build_options,
         );
-        exe.linkLibrary(self.addStaticLibrary(
+        exe.root_module.linkLibrary(self.addStaticLibrary(
             "ziggba",
             gba_module,
             options.build_options,
@@ -282,7 +288,7 @@ pub const GbaBuild = struct {
         exe.setLinkerScript(self.ziggbaPath(gba_linker_script_path));
         // Assembly modules
         for(asm_file_paths) |asm_path| {
-            exe.addAssemblyFile(self.ziggbaPath(asm_path));
+            exe.root_module.addAssemblyFile(self.ziggbaPath(asm_path));
         }
         // Generate GBA ROM
         const objcopy_step = exe.addObjCopy(.{

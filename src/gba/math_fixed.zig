@@ -703,7 +703,7 @@ pub fn FixedI(
                     : [a] "{r0}" (a),
                       [b] "{r1}" (b),
                       [arm_address] "{r3}" (arm_address),
-                    : "r0", "r1", "r3"
+                    : .{ .r0 = true, .r1 = true, .r3 = true }
                 );
             }
             // Use optimized IWRAM ARM call for FixedI32R8
@@ -715,7 +715,7 @@ pub fn FixedI(
                     : [a] "{r0}" (a),
                       [b] "{r1}" (b),
                       [arm_address] "{r3}" (arm_address),
-                    : "r0", "r1", "r3"
+                    : .{ .r0 = true, .r1 = true, .r3 = true }
                 );
             }
             // Fallback for other types with a backing int larger than 16 bits
