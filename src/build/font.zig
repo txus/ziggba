@@ -62,7 +62,7 @@ const Glyph = struct {
     x_max: u16,
     y_min: u16,
     y_max: u16,
-    rows: std.array_list.Managed(u16),
+    rows: std.ArrayList(u16),
 
     pub fn init(
         image: Image,
@@ -75,7 +75,7 @@ const Glyph = struct {
             .x_max = image_rect.x,
             .y_min = image_rect.y + image_rect.height,
             .y_max = image_rect.y,
-            .rows = std.array_list.Managed(u16).init(allocator),
+            .rows = .empty,
         };
         // Find bounds of image data within the grid cell rect.
         for(image_rect.y..image_rect.y + image_rect.height) |px_y| {
@@ -108,14 +108,14 @@ const Glyph = struct {
                 }
                 col += 1;
             }
-            try glyph.rows.append(row);
+            try glyph.rows.append(allocator, row);
         }
         // All done!
         return glyph;
     }
     
-    pub fn deinit(self: Glyph) void {
-        self.rows.deinit();
+    pub fn deinit(self: *Glyph, allocator: std.mem.Allocator) void {
+        self.rows.deinit(allocator);
     }
         
     pub fn isBlank(self: Glyph) bool {
@@ -123,26 +123,34 @@ const Glyph = struct {
     }
     
     /// Write header bytes into a buffer.
-    pub fn encodeHeader(self: Glyph, buffer: *std.array_list.Managed(u8)) !void {
+    pub fn encodeHeader(
+        self: Glyph,
+        allocator: std.mem.Allocator,
+        buffer: *std.ArrayList(u8),
+    ) !void {
         const width: usize = if(self.x_max >= self.x_min) self.x_max - self.x_min else 0;
         const height: usize = if(self.y_max >= self.y_min) self.y_max - self.y_min else 0;
         const y_offset = self.y_min - self.image_rect.y;
         assert(width >= 0 and width < 16);
         assert(height >= 0 and height < 16);
         assert(y_offset >= 0 and y_offset < 16);
-        try buffer.append(@intCast((width & 0xF) | ((height & 0xF) << 4)));
-        try buffer.append(@intCast(y_offset & 0xF));
+        try buffer.append(allocator, @intCast((width & 0xF) | ((height & 0xF) << 4)));
+        try buffer.append(allocator, @intCast(y_offset & 0xF));
     }
 
     /// Write bitmap data bytes into a buffer.
-    pub fn encodeRows(self: Glyph, buffer: *std.array_list.Managed(u8)) !void {
+    pub fn encodeRows(
+        self: Glyph,
+        allocator: std.mem.Allocator,
+        buffer: *std.ArrayList(u8),
+    ) !void {
         const wide = (self.x_max - self.x_min) > 8;
         for(self.rows.items) |row| {
             if(wide) {
-                try buffer.append(@intCast(row & 0xff));
-                try buffer.append(@intCast((row >> 8) & 0xff));
+                try buffer.append(allocator, @intCast(row & 0xff));
+                try buffer.append(allocator, @intCast((row >> 8) & 0xff));
             } else {
-                try buffer.append(@intCast(row & 0xff));
+                try buffer.append(allocator, @intCast(row & 0xff));
             }
         }
     }
@@ -206,7 +214,7 @@ pub fn buildFont(
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     // Read glyphs from the image.
-    var glyphs = std.array_list.Managed(Glyph).init(arena.allocator());
+    var glyphs: std.ArrayList(Glyph) = .empty;
     const grid_cols = image_rect.width / grid_size.x;
     const grid_rows = image_rect.height / grid_size.y;
     for(0..grid_rows) |row| {
@@ -218,28 +226,28 @@ pub fn buildFont(
                 .height = grid_size.y,
             };
             const glyph = try Glyph.init(image, grid_rect, arena.allocator());
-            try glyphs.append(glyph);
+            try glyphs.append(arena.allocator(), glyph);
         }
     }
     // Encode glyph data.
-    var headers = std.array_list.Managed(u8).init(allocator);
-    defer headers.deinit();
-    var bitmaps = std.array_list.Managed(u8).init(arena.allocator());
+    var headers: std.ArrayList(u8) = .empty;
+    defer headers.deinit(allocator);
+    var bitmaps: std.ArrayList(u8) = .empty;
     const headers_len = glyphs.items.len * 4; // 4 bytes per glyph
     for(glyphs.items) |glyph| {
         var offset: usize = 0;
         if(!glyph.isBlank()) {
             offset = bitmaps.items.len + headers_len;
-            try glyph.encodeRows(&bitmaps);
+            try glyph.encodeRows(arena.allocator(), &bitmaps);
         }
-        try glyph.encodeHeader(&headers);
-        try headers.append(@intCast(offset & 0xff));
-        try headers.append(@intCast((offset >> 8) & 0xff));
+        try glyph.encodeHeader(allocator, &headers);
+        try headers.append(allocator, @intCast(offset & 0xff));
+        try headers.append(allocator, @intCast((offset >> 8) & 0xff));
     }
     // All done!
     assert(headers.items.len == headers_len);
-    try headers.appendSlice(bitmaps.items);
-    return headers.toOwnedSlice();
+    try headers.appendSlice(allocator, bitmaps.items);
+    return headers.toOwnedSlice(allocator);
 }
 
 /// Convert font images as a build step.
