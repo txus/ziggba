@@ -172,4 +172,27 @@ pub fn build(std_b: *std.Build) void {
     const test_step = std_b.step("test", "Run unit tests");
     test_step.dependOn(&test_math.step);
     test_step.dependOn(&test_format.step);
+    
+    // Build API docs with `zig build docs`, written to `zig-out/docs/`.
+    
+    const docs_step = std_b.step("docs", "Build API docs");
+    const docs_roots = [_]struct { name: []const u8, path: []const u8 }{
+        .{ .name = "gba", .path = "src/gba/gba.zig" },
+        .{ .name = "build", .path = "src/build_docs.zig" },
+    };
+    for(docs_roots) |root| {
+        const docs_obj = std_b.addObject(.{
+            .name = root.name,
+            .root_module = std_b.createModule(.{
+                .root_source_file = std_b.path(root.path),
+                .target = std_b.graph.host,
+            }),
+        });
+        const install_docs = std_b.addInstallDirectory(.{
+            .source_dir = docs_obj.getEmittedDocs(),
+            .install_dir = .prefix,
+            .install_subdir = std_b.fmt("docs/{s}", .{ root.name }),
+        });
+        docs_step.dependOn(&install_docs.step);
+    }
 }

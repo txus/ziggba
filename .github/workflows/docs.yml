@@ -30,9 +30,9 @@ jobs:
 
       - name: Build API docs
         run: |
-          mkdir docs-out/
-          ./zig build-lib -femit-docs=docs-out/gba src/gba/gba.zig
-          ./zig build-lib -femit-docs=docs-out/build src/build/build.zig
+          ./zig build docs --prefix docs-out
+          mv docs-out/docs/* docs-out/
+          rmdir docs-out/docs
           cp docs/api-index.html docs-out/index.html
 
       - name: Deploy to gh-pages
